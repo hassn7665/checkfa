@@ -282,7 +282,7 @@
 
 <script>
 // ── رابط الـ API ──
-const API = "https://script.google.com/macros/s/AKfycbxSta583LZSPpO_XuKWAwPr76Kk6y6Kl78jxTrolm5n2fTGM6LC4iXvM2q4FXC4DWI/exec";
+const API = "https://script.google.com/macros/s/AKfycby5HyN82qzBgA6cP507fH_M6arOGmw-y6JmWk096H7gjXNRzjYbzG1TKcieeUvfRxA/exec";
 
 // ── رابط صفحة الخدمات (عدّله لاحقاً) ──
 const SERVICES_URL = "#services";   // ← ضع الرابط هنا عندما تبرمج الصفحة
@@ -295,18 +295,38 @@ const result = document.getElementById("result");
 if (!sn) {
   showError("رقم البطاقة غير موجود", "تأكد من مسح رمز QR بشكل صحيح");
 } else {
-  fetch(API + "?sn=" + encodeURIComponent(sn))
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok && data.active) {
-        showSuccess(data.sn, data.name, data.status);
-      } else if (data.ok && !data.active) {
-        showInactive(data.sn, data.name);
-      } else {
-        showError("البطاقة غير موجودة في النظام", data.message || "");
-      }
-    })
-    .catch(() => showError("خطأ في الاتصال بالخادم", "تحقق من اتصالك بالإنترنت وحاول مجدداً"));
+  // ── JSONP لتجاوز CORS في Google Apps Script ──
+  const cbName = "cb_" + Date.now();
+  const script = document.createElement("script");
+  const timer  = setTimeout(() => {
+    cleanup();
+    showError("انتهت مهلة الاتصال", "تحقق من اتصالك بالإنترنت وحاول مجدداً");
+  }, 10000);
+
+  function cleanup() {
+    clearTimeout(timer);
+    delete window[cbName];
+    if (script.parentNode) script.parentNode.removeChild(script);
+  }
+
+  window[cbName] = function(data) {
+    cleanup();
+    if (data.ok && data.active) {
+      showSuccess(data.sn, data.name, data.status);
+    } else if (data.ok && !data.active) {
+      showInactive(data.sn, data.name);
+    } else {
+      showError("البطاقة غير موجودة في النظام", data.message || "");
+    }
+  };
+
+  script.onerror = function() {
+    cleanup();
+    showError("خطأ في الاتصال بالخادم", "تحقق من اتصالك بالإنترنت وحاول مجدداً");
+  };
+
+  script.src = API + "?sn=" + encodeURIComponent(sn) + "&callback=" + cbName;
+  document.head.appendChild(script);
 }
 
 function showSuccess(sn, name, status) {
